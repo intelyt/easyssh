@@ -86,10 +86,10 @@ class SSHConnection(object):
         self._sftp: SFTPClient = None
 
         self._host: str = kwargs["host"]
-        self._port: int = kwargs["port"] if kwargs["port"] else 22
-        self._hostkey: str = kwargs["hostkey"] if kwargs["hostkey"] else None
+        self._port: int = kwargs.get("port", 22)
         self._username: str = kwargs["username"]
-        self._password: str = kwargs["password"] if kwargs["password"] else None
+        self._password: str = kwargs.get("password", None)
+        self._hostkey: str = kwargs.get("hostkey", None)
 
     @property
     def platform(self) -> str:
