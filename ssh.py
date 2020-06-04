@@ -49,6 +49,25 @@ def to_str(bytes_or_str):
 
 
 class SSHConnection(object):
+    """
+    For example:
+
+    use username and password
+    server = {"host": "ip", "port": 22, "username": "Btbtcore", "password": "Pass2020", "hostkey": "None"}
+    ssh = SSHConnection(**server)
+    ssh.connect()
+    ssh.system("pwd")
+    ssh.disconnect()
+
+    user private key
+
+    server = {"host": "ip", "port": 22, "username": "Btbtcore", "password": None, "hostkey": "/tmp/atdeploy_rsa"}
+    ssh = SSHConnection(**server)
+    ssh.connect()
+    ssh.system("pwd")
+    ssh.disconnect()
+
+    """
  
     def __init__(self, **kwargs):
         """
