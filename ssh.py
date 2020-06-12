@@ -1,39 +1,38 @@
 # coding:utf-8
-from typing import NoReturn, List, Any
+import socket
 import os
 import stat
-
+from sys import platform
 try:
     from nt import _getvolumepathname
 except ImportError:
     _getvolumepathname = None
 
-from paramiko import Transport, SFTPClient, SSHClient, SFTPFile
 import paramiko
 
-win = "win"
 
+win = "win"
 winsep = "\\"
 unixsep = "/"
 
 
-def get_local_folder_files(folder: str) -> List[str]:
+def get_local_folder_files(folder):
     """
     递归获取本地文件夹所有的文件
     :param folder:
     :return:
     """
-    result_list: List = []
+    result_list = []
 
     def get_file(folderName):
-        for f in os.listdir(folderName):
-            f = os.path.join(folderName, f)
-            if os.path.isdir(f):
-                get_file(f)
-            elif os.path.isfile(f):
-                result_list.append(f)
-            elif os.path.islink(f):
-                result_list.append(f)
+        for base_path in os.listdir(folderName):
+            asb_path = os.path.join(folderName, base_path)
+            if os.path.isdir(asb_path):
+                get_file(asb_path)
+            elif os.path.isfile(asb_path):
+                result_list.append(asb_path)
+            elif os.path.islink(asb_path):
+                result_list.append(asb_path)
     get_file(folder)
     return result_list
 
@@ -48,7 +47,7 @@ def to_str(bytes_or_str):
     return bytes_or_str.decode('utf-8') if isinstance(bytes_or_str, bytes) else bytes_or_str
 
 
-class SSHConnection(object):
+class SSHConnection:
     """
     For example:
 
@@ -81,19 +80,18 @@ class SSHConnection(object):
                     hostkey -> str: ssh login private key (password or hostkey is necessary)
         """
 
-        self._transport: Transport = None
-        self._ssh: SSHClient = None
-        self._sftp: SFTPClient = None
+        self._transport = None
+        self._ssh = None
+        self._sftp = None
 
-        self._host: str = kwargs["host"]
-        self._port: int = kwargs.get("port", 22)
-        self._username: str = kwargs["username"]
-        self._password: str = kwargs.get("password", None)
-        self._hostkey: str = kwargs.get("hostkey", None)
+        self._host = kwargs["host"]
+        self._port = kwargs.get("port", 22)
+        self._username = kwargs["username"]
+        self._password= kwargs.get("password", None)
+        self._hostkey = kwargs.get("hostkey", None)
 
     @property
     def platform(self) -> str:
-        from sys import platform
         return platform
 
     @property
@@ -117,24 +115,41 @@ class SSHConnection(object):
         return self._password
 
     @property
-    def sshClient(self) -> SSHClient:
+    def sshClient(self):
         return self._ssh
 
     @property
-    def transport(self) -> Transport:
+    def transport(self):
         return self._transport
 
     @property
-    def sFTPClient(self) -> SFTPClient:
+    def sFTPClient(self):
         return self._sftp
 
-    def connect(self) -> NoReturn:
+    @staticmethod
+    def socket_test(host, port):
+        """
+        to test host's port whether is open
+        :param host:
+        :param port:
+        :return:
+        """
+        if not (0 < port < 65536):
+            raise Exception("not standard ip")
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            result = s.connect_ex((host, port))
+            if result == 0:
+                return True
+
+    def connect(self):
         """
         connect to the server
         :return:
         """
+        # 先检测ip的端口是否通
+        assert self.socket_test(self.host, self.port)
         # 创建 管道
-        transport: Transport = paramiko.Transport(self.host, self.port)
+        transport = paramiko.Transport(self.host, self.port)
         if self.password:
             transport.connect(username=self.username, password=self.password)
         else:
@@ -142,15 +157,15 @@ class SSHConnection(object):
             transport.connect(username=self.username, pkey=privateKey)
         self._transport = transport
         # 利用创建ssh 连接
-        ssh: SSHClient = paramiko.SSHClient()
+        ssh = paramiko.SSHClient()
         ssh._transport = self._transport
         self._ssh = ssh
 
         # 利用 创建sftp客户端
-        sftp: SFTPClient = paramiko.SFTPClient.from_transport(self._transport)
+        sftp = paramiko.SFTPClient.from_transport(self._transport)
         self._sftp = sftp
 
-    def disconnect(self) -> NoReturn:
+    def disconnect(self):
         """
         disconnect to the server
         :return:
@@ -159,7 +174,7 @@ class SSHConnection(object):
         self.transport.close()
         self.sFTPClient.close()
 
-    def exec_command(self, command: str, timeout=3600) -> str:
+    def exec_command(self, command, timeout=3600):
         """
         maybe function system is better to understand
         Execute a command on the SSH server.  A new `.Channel` is opened and
@@ -174,7 +189,7 @@ class SSHConnection(object):
         error = to_str(stderr.read())
         return error if error.strip() else res
 
-    def system(self, command: str, timeout=3600) -> str:
+    def system(self, command: str, timeout=3600):
         """
         Execute a command on the SSH server.  A new `.Channel` is opened and
         the requested command is executed.  The command's input and output
@@ -188,10 +203,10 @@ class SSHConnection(object):
         error = to_str(stderr.read())
         return error if error.strip() else res
 
-    def upload(self, localpath: str, remotepath: str, mode=0o755) -> NoReturn:
+    def upload(self, localpath, remotepath, mode=0o755):
         """
         Copy a local file (``localpath``) to the SFTP server as ``remotepath``.
-        Any exception raised by operations will be passed through.  This
+         exception raised by operations will be passed through.  This
         method is primarily provided as a convenience. if mode will chmod remotepath mode
 
         The SFTP operations use pipelining for speed.
@@ -213,7 +228,7 @@ class SSHConnection(object):
         if mode:
             self.sFTPClient.chmod(remotepath, mode)
 
-    def upload_folder(self, localfolder: str, remotefolder: str):
+    def upload_folder(self, localfolder, remotefolder):
         """
           upload local folder to remote folder
          :param localfolder:
@@ -227,10 +242,10 @@ class SSHConnection(object):
                 remote_file = remote_file.replace(winsep, unixsep)
             self.upload(local_file, remote_file)
 
-    def download(self, remotepath: str, localpath: str) -> NoReturn:
+    def download(self, remotepath, localpath):
         """
         Copy a remote file (``remotepath``) from the SFTP server to the local
-        host as ``localpath``.  Any exception raised by operations will be
+        host as ``localpath``.   exception raised by operations will be
         passed through.  This method is primarily provided as a convenience.
         :param str remotepath: the remote file to copy
         :param str localpath: the destination path on the local host
@@ -238,7 +253,7 @@ class SSHConnection(object):
         """
         self.sFTPClient.get(remotepath, localpath)
 
-    def download_folder(self, remotefolder: str, localfolder: str):
+    def download_folder(self, remotefolder, localfolder):
         """
 
         :param remotefolder:
@@ -252,7 +267,7 @@ class SSHConnection(object):
                 local_file = local_file.replace(unixsep, winsep)
             self.upload(local_file, remote_file)
 
-    def rename(self, oldpath: str, newpath: str) -> NoReturn:
+    def rename(self, oldpath, newpath):
         """
         Rename a file or folder from ``oldpath`` to ``newpath``.
        .. note::
@@ -269,7 +284,7 @@ class SSHConnection(object):
        """
         self.sFTPClient.rename(oldpath, newpath)
 
-    def chmod(self, path: str, mode=0o755) -> NoReturn:
+    def chmod(self, path, mode=0o755):
         """
         Change the mode (permissions) of a file.  The permissions are
         unix-style and identical to those used by Python's `os.chmod`
@@ -280,7 +295,7 @@ class SSHConnection(object):
        """
         self.sFTPClient.chmod(path, mode)
 
-    def mkdir(self,  path: str, mode=0o755) -> NoReturn:
+    def mkdir(self,  path, mode=0o755):
         """
         Create a folder (directory) named ``path`` with numeric mode ``mode``.
         The default mode is 0777 (octal).  On some systems, mode is ignored.
@@ -291,7 +306,7 @@ class SSHConnection(object):
        """
         self.sFTPClient.mkdir(path, mode=mode)
 
-    def mkdir_p(self, path: str, mode=0o755) -> NoReturn:
+    def mkdir_p(self, path, mode=0o755):
         """
         linux is mkdir -p path & chmod path mode
         Create a folder (directory) named ``path`` with numeric mode ``mode``.
@@ -305,7 +320,7 @@ class SSHConnection(object):
         if mode:
             self.sFTPClient.chmod(path, mode)
 
-    def remove(self, path: str) -> NoReturn:
+    def remove(self, path):
         """
         Remove the file at the given path.  This only works on files; for
         removing folders (directories), use `rmdir`.
@@ -315,14 +330,14 @@ class SSHConnection(object):
         """
         self.sFTPClient.remove(path)
 
-    def rmdir(self, path: str) -> NoReturn:
+    def rmdir(self, path):
         """
         Remove the folder named ``path``.
         :param str path: name of the folder to remove
         """
         self.sFTPClient.rmdir(path)
 
-    def rmdir_rf(self, path: str) -> NoReturn:
+    def rmdir_rf(self, path):
         """
         linux is rm -rf path
         Remove the folder named ``path``.
@@ -343,7 +358,7 @@ class SSHConnection(object):
             self.rmdir(inner_folder)
         self.rmdir(path)
 
-    def chdir(self, path: str) -> NoReturn:
+    def chdir(self, path):
         """
         Change the "current directory" of this SFTP session.  Since SFTP
         doesn't really have the concept of a current working directory, this is
@@ -357,7 +372,7 @@ class SSHConnection(object):
         """
         self.sFTPClient.chdir(path)
 
-    def symlink(self, source: str, dest: str) -> NoReturn:
+    def symlink(self, source, dest):
         """
         Create a symbolic link to the ``source`` path at ``destination``.
 
@@ -367,7 +382,7 @@ class SSHConnection(object):
         """
         self.sFTPClient.symlink(source, dest)
 
-    def unlink(self, linkname: str):
+    def unlink(self, linkname):
         """
         Remove a file (same as remove()).
         If dir_fd is not None, it should be a file descriptor open to a directory,
@@ -377,7 +392,7 @@ class SSHConnection(object):
         """
         self.remove(linkname)
 
-    def open(self, filename: str, mode="r", bufsize=-1) -> SFTPFile:
+    def open(self, filename, mode="r", bufsize=-1):
         """
         Open a file on the remote server.  The arguments are the same as for
         Python's built-in `python:file` (aka `python:open`).  A file-like
@@ -412,7 +427,7 @@ class SSHConnection(object):
 
         return self.sFTPClient.open(filename, mode, bufsize)
 
-    def normalize(self, path: str) -> str:
+    def normalize(self, path):
         """
            Return the normalized path (on the server) of a given path.  This
            can be used to quickly resolve symbolic links or determine what the
@@ -426,7 +441,7 @@ class SSHConnection(object):
         """
         return self.sFTPClient.normalize(path)
 
-    def chown(self, path: str, uid: int, gid: int):
+    def chown(self, path, uid, gid):
         """
         Change the owner (``uid``) and group (``gid``) of a file.  As with
         Python's `os.chown` function, you must pass both arguments, so if you
@@ -439,14 +454,14 @@ class SSHConnection(object):
         """
         return self.sFTPClient.chown(path, uid, gid)
 
-    def get_channel(self) -> object:
+    def get_channel(self):
         """
         Return the underlying `.Channel` object for this SFTP session.  This
         might be useful for doing things like setting a timeout on the channel.
         """
         return self.sFTPClient.get_channel()
 
-    def listdir(self, path=".") -> List[str]:
+    def listdir(self, path="."):
         """
         Return a list containing the names of the entries in the given
         ``path``.
@@ -459,24 +474,24 @@ class SSHConnection(object):
         """
         return self.sFTPClient.listdir(path)
 
-    def get_folder_files(self, folder: str) -> List[str]:
+    def get_folder_files(self, folder):
         """
         获取文件夹下所有的文件 类似 os.walk
         :return:
         """
-        result_list: List = []
+        result_list = []
 
         def get_file(folderName):
-            for f in self.listdir(folderName):
-                f = os.path.join(folderName, f).replace("\\", "/")
-                if self.isdir(f):
-                    get_file(f)
-                elif self.isfile(f):
-                    result_list.append(f)
+            for base_path in self.listdir(folderName):
+                abs_path = os.path.join(folderName, base_path).replace(winsep, unixsep)
+                if self.isdir(abs_path):
+                    get_file(abs_path)
+                elif self.isfile(abs_path):
+                    result_list.append(abs_path)
         get_file(folder)
         return result_list
 
-    def stat(self, path: str) -> Any:
+    def stat(self, path):
         """
         Retrieve information about a file on the remote system.  The return
         value is an object whose attributes correspond to the attributes of
@@ -497,7 +512,7 @@ class SSHConnection(object):
         """
         return self.sFTPClient.stat(path)
 
-    def lstat(self, path: str) -> Any:
+    def lstat(self, path):
         """
         Retrieve information about a file on the remote system, without
         following symbolic links (shortcuts).  This otherwise behaves exactly
@@ -510,7 +525,7 @@ class SSHConnection(object):
         """
         return self.sFTPClient.lstat(path)
 
-    def exists(self, path: str) -> bool:
+    def exists(self, path):
         """Test whether a path exists.
           Returns False for broken symbolic links
          :param str path: the filename to test whether exists in the remote server
@@ -521,7 +536,7 @@ class SSHConnection(object):
             return False
         return True
 
-    def isfile(self, path: str) -> bool:
+    def isfile(self, path):
         """Test whether a path is a regular
          file to test whether exists in the remote server
          :param str path: the filename to test whether if regular file in the remote server
@@ -532,7 +547,7 @@ class SSHConnection(object):
             return False
         return stat.S_ISREG(st.st_mode)
 
-    def islink(self, path: str) -> bool:
+    def islink(self, path):
         """
         Test whether a path is a symbolic link.
         This will always return false for Windows prior to 6.0.
@@ -543,7 +558,7 @@ class SSHConnection(object):
             return False
         return stat.S_ISLNK(st.st_mode)
 
-    def isdir(self, path: str) -> bool:
+    def isdir(self, path):
         """Return true if the pathname
         refers to an existing directory.
         :param str path: the filename to test whether if is directory in the remote server
@@ -556,7 +571,7 @@ class SSHConnection(object):
         return stat.S_ISDIR(st.st_mode)
 
     @staticmethod
-    def ismount(path: str):
+    def ismount(path):
         """Test whether a path is a mount point (a drive root, the root of a
         share, or a mounted volume)"""
         def _get_bothseps(p):
@@ -578,14 +593,14 @@ class SSHConnection(object):
         else:
             return False
 
-    def getsize(self, filename: str) -> int:
+    def getsize(self, filename):
         """Return the size of a file,
         reported by os.stat().
         :param str filename: the filename need to getsize in the remote server
         """
         return self.stat(filename).st_size
 
-    def getcwd(self) -> str:
+    def getcwd(self):
         """
         Return the "current working directory" for this SFTP session, as
         emulated by Paramiko.  If no directory has been set with `chdir`,
@@ -594,7 +609,7 @@ class SSHConnection(object):
         return self.sFTPClient.getcwd()
 
     # --------------------------
-    def download_from_svn(self, localPath: str, svnPath: str) -> NoReturn:
+    def download_from_svn(self, localPath, svnPath):
         """
         download file to the server from remote svn path
         :param localPath: the server local path
@@ -604,13 +619,15 @@ class SSHConnection(object):
         if svnPath.startswith('http'):
             command = "wget --no-check-certificate -P '{localPath}' '{svnPath}' " \
                       " --http-user='atdeploy' --http-password='Pass2016'".format(localPath=localPath, svnPath=svnPath)
-            self.exec_command(command)
+            return self.exec_command(command)
         elif svnPath.startswith('ftp'):
             command = "wget  -r -P '{localPath}' '{svnPath}' -nH -nc -nd " \
                       "--ftp-user='cisysadmin'--ftp-password='Pass2016'".format(localPath=localPath, svnPath=svnPath)
             self.exec_command(command)
         else:
-            print("error")
+            return None
+
+
 
 
 
