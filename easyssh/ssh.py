@@ -22,7 +22,7 @@ class SSHConnection:
     server = {"host": "ip", "port": 22, "username": "Btbtcore", "password": None, "hostkey": "/tmp/atdeploy_rsa"}
     ssh = SSHConnection(**server)
     ssh.connect()
-    ssh.system("pwd")
+    ssh.exec_command("pwd")
     ssh.disconnect()
 
     """
@@ -69,7 +69,7 @@ class SSHConnection:
         stdin, stdout, stderr = self.sshClient.exec_command(command, timeout=timeout)
         res = toStr(stdout.read())
         error = toStr(stderr.read())
-        return error if error.strip() else res
+        return res + error if error.strip() else res
 
     def upload(self, localPath, remotePath, mode=0o755):
         remoteFolder, filepath = os.path.split(remotePath)
@@ -108,7 +108,8 @@ class SSHConnection:
                 os.makedirs(local_folder)
             print("\t%s======>%s %d/%d" % (remote_file, remote_file, ind, len(remote_folder_files)))
             self.download(remote_file, remote_file)
-        shutil.move(remoteFolder, localFolder)
+        if remoteFolder != localFolder:
+            shutil.move(remoteFolder, localFolder)
         print("download folder %s ======> %s Done!" % (remoteFolder, localFolder))
 
     def rename(self, oldPath, newPath):
