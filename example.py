@@ -206,6 +206,6 @@ cat >>{limits_conf_filename}<<EOF
 
 
 if __name__ == "__main__":
-    server_config = {"host": "", "port": 22, "username": "root", "password": "yt.1314521", "hostkey": "None"}
+    server_config = {"host": "127.0.0.1", "port": 22, "username": "root", "password": "123456", "hostkey": "None"}
     i = InitCentos7(server_config)
     i.main()
