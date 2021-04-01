@@ -2,6 +2,7 @@
 import os
 import stat
 import shutil
+# import select
 try:
     from nt import _getvolumepathname
 except ImportError:
@@ -9,6 +10,7 @@ except ImportError:
 
 
 import paramiko
+
 from .common import *
 
 
@@ -60,10 +62,66 @@ class SSHConnection:
         # sftp
         self.sFTPClient = paramiko.SFTPClient.from_transport(self.transport)
 
+    def get_channel(self):
+        return self.sFTPClient.get_channel()
+
     def disconnect(self):
         self.transport.close()
         self.sshClient.close()
         self.transport.close()
+
+    def exec_command_without_block(self, command, timeout=3306, environment=None):
+        all_put_string = ""
+        stdin, stdout, stderr = self.sshClient.exec_command(command, timeout=timeout, environment=environment)
+
+        # print("======   output  ======")
+        # while not stdout.channel.exit_status_ready():
+        #     out_rlist, _, _ = select.select([stdout.channel], [], [], 0.0)
+        #     if len(out_rlist) > 0:
+        #         opt = stdout.channel.recv(1024).decode("utf-8")
+        #         if opt:
+        #             print(opt, end="")
+        #             all_put_string += opt
+        # print("======   output  ======")
+        #
+        # print("======   errput  ======")
+        # while stderr.channel.recv_stderr_ready():
+        #
+        #     err_rlist, _, _ = select.select([stderr.channel], [], [], 0.0)
+        #     if len(err_rlist) > 0:
+        #         ept = stderr.channel.recv_stderr(100).decode("utf-8")
+        #         print(ept, end="")
+        #         all_put_string += ept
+        # print("======   errput  ======")
+        # return all_put_string
+
+        stdout_iter = iter(stdout.readline, '')
+        stderr_iter = iter(stderr.readline, '')
+
+        print("======   output  ======")
+        for opt in stdout_iter:
+            if opt:
+                all_put_string += opt
+                print(opt.strip())
+        print("======   output  ======")
+
+        print("======   errput  ======")
+        for ept in stderr_iter:
+            if ept:
+                all_put_string += ept
+                print(ept.strip())
+        print("======   errput  ======")
+        return all_put_string
+
+        # from itertools import zip_longest
+        # stdout_iter = iter(stdout.readline, '')
+        # stderr_iter = iter(stderr.readline, '')
+        #
+        # for out, err in zip_longest(stdout_iter, stderr_iter):
+        #     if out:
+        #         print(out.strip())
+        #     if err:
+        #         print(err.strip())
 
     def exec_command(self, command, timeout=3600):
         stdin, stdout, stderr = self.sshClient.exec_command(command, timeout=timeout)
@@ -164,6 +222,9 @@ class SSHConnection:
 
         return self.sFTPClient.listdir(path)
 
+    def listdir_attr(self, path="."):
+        return self.sFTPClient.list_attr(path)
+
     def getFolderFiles(self, folder):
         result_list = []
 
@@ -179,6 +240,25 @@ class SSHConnection:
 
         get_file(folder)
         return result_list
+
+    def getFolderFilesSize(self, folder):
+        result_list = []
+
+        def get_file(folderName):
+            for base_path in self.listdir(folderName):
+                abs_path = standardizePath(os.path.join(folderName, base_path))
+                if self.isdir(abs_path):
+                    get_file(abs_path)
+                elif self.isfile(abs_path):
+                    result_list.append(self.stat(abs_path).st_size)
+                elif self.islink(abs_path):
+                    result_list.append(self.stat(abs_path).st_size)
+                else:
+                    continue
+
+        get_file(folder)
+        return sum(result_list)
+        # return self.exec_command("du -sh /{folder}".format(folder=folder)).strip()
 
     def stat(self, path):
 
