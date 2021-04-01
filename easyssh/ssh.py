@@ -2,12 +2,12 @@
 import os
 import stat
 import shutil
+
 # import select
 try:
     from nt import _getvolumepathname
 except ImportError:
     _getvolumepathname = None
-
 
 import paramiko
 
@@ -43,15 +43,15 @@ class SSHConnection:
 
     def connect(self):
         # ping
-        assert scanBySocket(self.host, self.port)
+        assert scan_by_socket(self.host, self.port)
 
         # tran
         transport = paramiko.Transport(self.host, self.port)
         if self.password:
             transport.connect(username=self.username, password=self.password)
         else:
-            privateKey = paramiko.RSAKey.from_private_key_file(self.hostkey)
-            transport.connect(username=self.username, pkey=privateKey)
+            private_key = paramiko.RSAKey.from_private_key_file(self.hostkey)
+            transport.connect(username=self.username, pkey=private_key)
 
         self.transport = transport
         # ssh
@@ -70,9 +70,11 @@ class SSHConnection:
         self.sshClient.close()
         self.transport.close()
 
-    def exec_command_without_block(self, command, timeout=3306, environment=None):
+    def exec_command_without_block(self, command, timeout=3600, environment=None):
         all_put_string = ""
-        stdin, stdout, stderr = self.sshClient.exec_command(command, timeout=timeout, environment=environment)
+        stdin, stdout, stderr = self.sshClient.exec_command(
+            command, timeout=timeout, environment=environment
+        )
 
         # print("======   output  ======")
         # while not stdout.channel.exit_status_ready():
@@ -95,8 +97,8 @@ class SSHConnection:
         # print("======   errput  ======")
         # return all_put_string
 
-        stdout_iter = iter(stdout.readline, '')
-        stderr_iter = iter(stderr.readline, '')
+        stdout_iter = iter(stdout.readline, "")
+        stderr_iter = iter(stderr.readline, "")
 
         print("======   output  ======")
         for opt in stdout_iter:
@@ -125,54 +127,66 @@ class SSHConnection:
 
     def exec_command(self, command, timeout=3600):
         stdin, stdout, stderr = self.sshClient.exec_command(command, timeout=timeout)
-        res = toStr(stdout.read())
-        error = toStr(stderr.read())
+        res = to_str(stdout.read())
+        error = to_str(stderr.read())
         return res + error if error.strip() else res
 
-    def upload(self, localPath, remotePath, mode=0o755):
-        remoteFolder, filepath = os.path.split(remotePath)
-        if not self.exists(remoteFolder):
-            self.exec_command("mkdir -p %s" % remoteFolder)
-        self.sFTPClient.put(localPath, remotePath, callback=callback)
+    def upload(self, local_path, remote_path, mode=0o755):
+        remote_folder, filepath = os.path.split(remote_path)
+        if not self.exists(remote_folder):
+            self.exec_command("mkdir -p %s" % remote_folder)
+        self.sFTPClient.put(local_path, remote_path, callback=callback)
         if mode:
-            self.sFTPClient.chmod(remotePath, mode)
+            self.sFTPClient.chmod(remote_path, mode)
 
-    def uploadFolder(self, localFolder, remoteFolder):
-        print("upload folder %s ======> %s" % (localFolder, remoteFolder))
-        localFolderFiles = list(getLocalFolderFiles(localFolder))
-        for ind, localFile in enumerate(localFolderFiles, start=1):
-            basename = os.path.basename(localFolder)
-            filename = os.path.split(localFile)[-1]
-            targetFolder = remoteFolder + "/" + basename + "/" + \
-                           standardizePath(os.path.dirname(localFile.replace(localFolder, "")))
-            if not os.path.exists(targetFolder):
-                self.mkdirTree(targetFolder)
-            targetFile = standardizePath(os.path.join(targetFolder, filename))
-            print("\tupload %s ======> %s uploading %d/%d" % (localFile, targetFile, ind, len(localFolderFiles)))
-            self.upload(localFile, targetFile)
+    def upload_folder(self, local_folder, remote_folder):
+        print("upload folder %s ======> %s" % (local_folder, remote_folder))
+        local_folder_files = list(get_local_folder_files(local_folder))
+        for ind, local_file in enumerate(local_folder_files, start=1):
+            basename = os.path.basename(local_folder)
+            filename = os.path.split(local_file)[-1]
+            target_folder = (
+                remote_folder
+                + "/"
+                + basename
+                + "/"
+                + standardize_path(
+                    os.path.dirname(local_file.replace(local_folder, ""))
+                )
+            )
+            if not os.path.exists(target_folder):
+                self.mkdir_tree(target_folder)
+            target_file = standardize_path(os.path.join(target_folder, filename))
+            print(
+                "\tupload %s ======> %s uploading %d/%d"
+                % (local_file, target_file, ind, len(local_folder_files))
+            )
+            self.upload(local_file, target_file)
 
-        print("upload folder %s ======> %s Done!" % (localFolder, remoteFolder))
+        print("upload folder %s ======> %s Done!" % (local_folder, remote_folder))
 
-    def download(self, remotePath, localPath):
-        self.sFTPClient.get(remotePath, localPath, callback=callback)
+    def download(self, remote_path, local_path):
+        self.sFTPClient.get(remote_path, local_path, callback=callback)
 
-    def downloadFolder(self, remoteFolder, localFolder):
+    def download_folder(self, remote_folder, local_folder):
 
-        print("download folder %s ======> %s" % (remoteFolder, localFolder))
-        remote_folder_files = self.getFolderFiles(remoteFolder)
+        print("download folder %s ======> %s" % (remote_folder, local_folder))
+        remote_folder_files = self.get_folder_files(remote_folder)
         for ind, remote_file in enumerate(remote_folder_files, start=1):
             local_folder, _ = os.path.split(remote_file)
             if not os.path.exists(local_folder):
                 os.makedirs(local_folder)
-            print("\t%s======>%s %d/%d" % (remote_file, remote_file, ind, len(remote_folder_files)))
+            print(
+                "\t%s======>%s %d/%d"
+                % (remote_file, remote_file, ind, len(remote_folder_files))
+            )
             self.download(remote_file, remote_file)
-        if remoteFolder != localFolder:
-            shutil.move(remoteFolder, localFolder)
-        print("download folder %s ======> %s Done!" % (remoteFolder, localFolder))
+        if remote_folder != local_folder:
+            shutil.move(remote_folder, local_folder)
+        print("download folder %s ======> %s Done!" % (remote_folder, local_folder))
 
-    def rename(self, oldPath, newPath):
-
-        self.sFTPClient.rename(oldPath, newPath)
+    def rename(self, old_path, new_path):
+        self.sFTPClient.rename(old_path, new_path)
 
     def chmod(self, path, mode=0o755):
         self.sFTPClient.chmod(path, mode)
@@ -181,7 +195,7 @@ class SSHConnection:
         self.sFTPClient.mkdir(path, mode=mode)
         return self.exists(path)
 
-    def mkdirTree(self, path, mode=0o755):
+    def mkdir_tree(self, path, mode=0o755):
         if not self.exists(path):
             self.exec_command("mkdir -p %s" % path)
         if mode:
@@ -199,7 +213,7 @@ class SSHConnection:
             self.sFTPClient.rmdir(path)
         return not self.exists(path)
 
-    def rmTree(self, path):
+    def rm_tree(self, path):
         self.exec_command("rm -rf %s" % path)
 
     def chdir(self, path):
@@ -211,26 +225,25 @@ class SSHConnection:
     def unlink(self, linkname):
         self.remove(linkname)
 
-    def open(self, filename, mode="r", bufferSize=-1):
+    def open(self, filename, mode="r", buffer_size=-1):
 
-        return self.sFTPClient.open(filename, mode, bufferSize)
+        return self.sFTPClient.open(filename, mode, buffer_size)
 
     def chown(self, path, uid, gid):
         return self.sFTPClient.chown(path, uid, gid)
 
     def listdir(self, path="."):
-
         return self.sFTPClient.listdir(path)
 
     def listdir_attr(self, path="."):
         return self.sFTPClient.list_attr(path)
 
-    def getFolderFiles(self, folder):
+    def get_folder_files(self, folder):
         result_list = []
 
-        def get_file(folderName):
-            for base_path in self.listdir(folderName):
-                abs_path = standardizePath(os.path.join(folderName, base_path))
+        def get_file(folder_name):
+            for base_path in self.listdir(folder_name):
+                abs_path = standardize_path(os.path.join(folder_name, base_path))
                 if self.isdir(abs_path):
                     get_file(abs_path)
                 elif self.isfile(abs_path):
@@ -241,12 +254,12 @@ class SSHConnection:
         get_file(folder)
         return result_list
 
-    def getFolderFilesSize(self, folder):
+    def get_folder_files_size(self, folder):
         result_list = []
 
-        def get_file(folderName):
-            for base_path in self.listdir(folderName):
-                abs_path = standardizePath(os.path.join(folderName, base_path))
+        def get_file(folder_name):
+            for base_path in self.listdir(folder_name):
+                abs_path = standardize_path(os.path.join(folder_name, base_path))
                 if self.isdir(abs_path):
                     get_file(abs_path)
                 elif self.isfile(abs_path):
@@ -298,12 +311,11 @@ class SSHConnection:
 
     @staticmethod
     def ismount(path):
-
         def _get_bothseps(p):
             if isinstance(p, bytes):
-                return b'\\/'
+                return b"\\/"
             else:
-                return '\\/'
+                return "\\/"
 
         path = os.fspath(path)
         seps = _get_bothseps(path)
