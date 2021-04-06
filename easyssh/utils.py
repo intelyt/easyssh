@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+from __future__ import print_function, division
 import socket
 import time
 
@@ -46,10 +47,21 @@ def to_str(bytes_or_str):
 
 def scan_by_socket(host, port):
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as scan_socket:
-        status_code = scan_socket.connect_ex((host, port))
+    from sys import version
+
+    if version.startswith("3."):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as scan_socket:
+            status_code = scan_socket.connect_ex((host, port))
+            if status_code == 0:
+                return True
+    elif version.startswith("2."):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        status_code = s.connect_ex((host, port))
         if status_code == 0:
+            s.close()
             return True
+    else:
+        pass
 
 
 def standardize_path(path):
