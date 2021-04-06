@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 # author = taoyin
 # github = https://github.com/intelyt/easyssh
-from __future__ import print_function
+from __future__ import print_function, division
 import os
 import stat
 
@@ -266,14 +266,14 @@ class SSHConnection:
     def exists(self, path):
         try:
             self.stat(path)
-        except OSError:
+        except (OSError, IOError):
             return False
         return True
 
     def isfile(self, path):
         try:
             st = self.stat(path)
-        except OSError:
+        except (OSError, IOError):
             return False
         return stat.S_ISREG(st.st_mode)
 
@@ -287,7 +287,7 @@ class SSHConnection:
     def isdir(self, path):
         try:
             st = self.stat(path)
-        except OSError:
+        except (OSError, IOError):
             return False
         return stat.S_ISDIR(st.st_mode)
 
