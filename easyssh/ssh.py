@@ -1,9 +1,8 @@
 # -*- coding:utf-8 -*-
+from __future__ import print_function
 import os
 import stat
-import shutil
 
-# import select
 try:
     from nt import _getvolumepathname
 except ImportError:
@@ -11,7 +10,7 @@ except ImportError:
 
 import paramiko
 
-from .common import *
+from easyssh.utils import *
 
 
 class SSHConnection:
@@ -75,28 +74,6 @@ class SSHConnection:
         stdin, stdout, stderr = self.sshClient.exec_command(
             command, timeout=timeout, environment=environment
         )
-
-        # print("======   output  ======")
-        # while not stdout.channel.exit_status_ready():
-        #     out_rlist, _, _ = select.select([stdout.channel], [], [], 0.0)
-        #     if len(out_rlist) > 0:
-        #         opt = stdout.channel.recv(1024).decode("utf-8")
-        #         if opt:
-        #             print(opt, end="")
-        #             all_put_string += opt
-        # print("======   output  ======")
-        #
-        # print("======   errput  ======")
-        # while stderr.channel.recv_stderr_ready():
-        #
-        #     err_rlist, _, _ = select.select([stderr.channel], [], [], 0.0)
-        #     if len(err_rlist) > 0:
-        #         ept = stderr.channel.recv_stderr(100).decode("utf-8")
-        #         print(ept, end="")
-        #         all_put_string += ept
-        # print("======   errput  ======")
-        # return all_put_string
-
         stdout_iter = iter(stdout.readline, "")
         stderr_iter = iter(stderr.readline, "")
 
@@ -115,18 +92,10 @@ class SSHConnection:
         print("======   errput  ======")
         return all_put_string
 
-        # from itertools import zip_longest
-        # stdout_iter = iter(stdout.readline, '')
-        # stderr_iter = iter(stderr.readline, '')
-        #
-        # for out, err in zip_longest(stdout_iter, stderr_iter):
-        #     if out:
-        #         print(out.strip())
-        #     if err:
-        #         print(err.strip())
-
-    def exec_command(self, command, timeout=3600):
-        stdin, stdout, stderr = self.sshClient.exec_command(command, timeout=timeout)
+    def exec_command(self, command, timeout=3600, environment=None):
+        stdin, stdout, stderr = self.sshClient.exec_command(
+            command, timeout=timeout, environment=environment
+        )
         res = to_str(stdout.read())
         error = to_str(stderr.read())
         return res + error if error.strip() else res
@@ -140,29 +109,28 @@ class SSHConnection:
             self.sFTPClient.chmod(remote_path, mode)
 
     def upload_folder(self, local_folder, remote_folder):
+
         print("upload folder %s ======> %s" % (local_folder, remote_folder))
         local_folder_files = list(get_local_folder_files(local_folder))
-        for ind, local_file in enumerate(local_folder_files, start=1):
-            basename = os.path.basename(local_folder)
-            filename = os.path.split(local_file)[-1]
-            target_folder = (
-                remote_folder
-                + "/"
-                + basename
-                + "/"
-                + standardize_path(
-                    os.path.dirname(local_file.replace(local_folder, ""))
-                )
-            )
-            if not os.path.exists(target_folder):
-                self.mkdir_tree(target_folder)
-            target_file = standardize_path(os.path.join(target_folder, filename))
-            print(
-                "\tupload %s ======> %s uploading %d/%d"
-                % (local_file, target_file, ind, len(local_folder_files))
-            )
-            self.upload(local_file, target_file)
 
+        remote_files_relativity = [
+            standardize_path(file[len(local_folder) + 1 :])
+            for file in local_folder_files
+        ]
+        remote_files = [
+            standardize_path(
+                "{remote_folder}/{file}".format(remote_folder=remote_folder, file=file)
+            )
+            for file in remote_files_relativity
+        ]
+
+        for ind, local_file in enumerate(local_folder_files):
+            remote_file = remote_files[ind]
+            print(
+                "\t%s======>%s %d/%d"
+                % (local_file, remote_file, ind, len(local_folder_files))
+            )
+            self.upload(local_file, remote_file)
         print("upload folder %s ======> %s Done!" % (local_folder, remote_folder))
 
     def download(self, remote_path, local_path):
@@ -172,17 +140,29 @@ class SSHConnection:
 
         print("download folder %s ======> %s" % (remote_folder, local_folder))
         remote_folder_files = self.get_folder_files(remote_folder)
-        for ind, remote_file in enumerate(remote_folder_files, start=1):
-            local_folder, _ = os.path.split(remote_file)
-            if not os.path.exists(local_folder):
-                os.makedirs(local_folder)
+
+        remote_folder_len = len(remote_folder)
+        remote_files_relativity = [
+            standardize_path(file[remote_folder_len + 1 :])
+            for file in remote_folder_files
+        ]
+        local_files = [
+            standardize_path(
+                "{local_folder}/{file}".format(local_folder=local_folder, file=file)
+            )
+            for file in remote_files_relativity
+        ]
+
+        for ind, remote_file in enumerate(remote_folder_files):
+            head, _ = os.path.split(remote_file)
+            local_file = local_files[ind]
+            if not os.path.exists(head):
+                os.makedirs(head)
             print(
                 "\t%s======>%s %d/%d"
-                % (remote_file, remote_file, ind, len(remote_folder_files))
+                % (remote_file, local_file, ind, len(remote_folder_files))
             )
-            self.download(remote_file, remote_file)
-        if remote_folder != local_folder:
-            shutil.move(remote_folder, local_folder)
+            self.download(remote_file, local_file)
         print("download folder %s ======> %s Done!" % (remote_folder, local_folder))
 
     def rename(self, old_path, new_path):
