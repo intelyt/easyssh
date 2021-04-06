@@ -1,4 +1,6 @@
 # -*- coding:utf-8 -*-
+# author = taoyin
+# github = https://github.com/intelyt/easyssh
 from __future__ import print_function
 import os
 import stat
